@@ -93,7 +93,7 @@ module JSONAPI
       if request.params[:filter]
         query_params[:filter] = request.params[:filter].respond_to?(:to_unsafe_hash) ? request.params[:filter].to_unsafe_hash : request.params[:filter]
       end
-
+      binding.pry
       query_params
     end
 
@@ -103,6 +103,7 @@ module JSONAPI
         { errors: @operation_results.all_errors }
       else
         if @operation_results.results.length == 1
+          p "results_to_hash results length == 1"
           result = @operation_results.results[0]
 
           case result
@@ -118,6 +119,7 @@ module JSONAPI
           end
 
         elsif @operation_results.results.length > 1
+          p "results_to_hash results length == 1"
           resources = []
           @operation_results.results.each do |result|
             case result
@@ -127,6 +129,8 @@ module JSONAPI
               resources.concat(result.resources)
             end
           end
+          p "results_to_hash resources"
+          p "#{resources}"
           @serializer.serialize_to_hash(resources)
         end
       end

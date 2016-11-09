@@ -61,6 +61,7 @@ module JSONAPI
     end
 
     def process_request
+      p "==========================PROCESS_REQUEST"
       return unless verify_accept_header
       @request = JSONAPI::RequestParser.new(params, context: context,
                                             key_formatter: key_formatter,
@@ -68,11 +69,14 @@ module JSONAPI
       unless @request.errors.empty?
         render_errors(@request.errors)
       else
+        p "operating operation! #{@request.operations}"
         operations = @request.operations
         unless JSONAPI.configuration.resource_cache.nil?
           operations.each {|op| op.options[:cache_serializer] = resource_serializer }
         end
         results = process_operations(operations)
+        binding.pry
+        p "RENDER RESULTS!"
         render_results(results)
       end
     rescue => e
@@ -221,7 +225,7 @@ module JSONAPI
     end
 
     def render_results(operation_results)
-      
+      p "IN RENDER_RESULTS"
       response_doc = create_response_document(operation_results)
       content = response_doc.contents
       
@@ -246,7 +250,7 @@ module JSONAPI
     end
 
     def create_response_document(operation_results)
-      
+      p "CREATE RESPONSE DOCUMENT"
       JSONAPI::ResponseDocument.new(
         operation_results,
         operation_results.has_errors? ? nil : resource_serializer,

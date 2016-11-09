@@ -1,0 +1,19 @@
+# color_1:
+#   id: 1
+#   name: "red"
+#   painting_id: 4
+
+# color_2:
+#   id: 2
+#   name: "green"
+#   painting_id: 4
+
+# color_3:
+#   id: 3
+#   name: "blue"
+#   painting_id: 2
+
+# color_4:
+#   id: 4
+#   name: "yellow"
+#   painting_id: 1

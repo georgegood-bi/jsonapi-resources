@@ -2,6 +2,9 @@ source 'https://rubygems.org'
 
 gemspec
 
+  gem 'pry-rails'
+  gem 'pry-byebug'
+  gem 'pry-stack_explorer'
 platforms :ruby do
   gem 'sqlite3', '1.3.10'
 end

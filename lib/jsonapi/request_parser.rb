@@ -1,14 +1,14 @@
 require 'jsonapi/operation'
 require 'jsonapi/paginator'
+require 'jsonapi/filter_store'
 
 module JSONAPI
   class RequestParser
-    attr_accessor :fields, :include, :filters, :included_filters, :sort_criteria, :errors, :operations,
+    attr_accessor :fields, :include, :filters, :included_filters, :filter_store, :sort_criteria, :errors, :operations,
                   :resource_klass, :context, :paginator, :source_klass, :source_id,
                   :include_directives, :params, :warnings, :server_error_callbacks
 
     def initialize(params = nil, options = {})
-
       @params = params
       @context = options[:context]
       @key_formatter = options.fetch(:key_formatter, JSONAPI.configuration.key_formatter)
@@ -25,6 +25,7 @@ module JSONAPI
       @paginator = nil
       @id = nil
       @server_error_callbacks = options.fetch(:server_error_callbacks, [])
+      @filter_store = {}
       setup_action(@params)
     end
 
@@ -76,6 +77,7 @@ module JSONAPI
     def setup_show_action(params)
       parse_fields(params[:fields])
       parse_include_directives(params[:include])
+      parse_filters(params[:filter])
       @id = params[:id]
       add_show_operation
     end
@@ -134,6 +136,7 @@ module JSONAPI
     end
 
     def initialize_source(params)
+      binding.pry
       @source_klass = Resource.resource_for(params.require(:source))
       @source_id = @source_klass.verify_key(params.require(@source_klass._as_parent_key), @context)
     end
@@ -230,6 +233,7 @@ module JSONAPI
 
     def parse_filters(filters)
       return unless filters
+      @filter_store = JSONAPI::FilterStore.new(@params)
       unless JSONAPI.configuration.allow_filter
         fail JSONAPI::Exceptions::ParametersNotAllowed.new([:filter])
       end
@@ -240,28 +244,37 @@ module JSONAPI
       end
 
       filters.each do |key, value|
-        resource_name, filterer = key.to_s.split('.')
-        if filterer
-          parse_included_filter(resource_name, filterer, value)
+        *resource_names, filter = key.to_s.split('.')
+        if resource_names.any?
+          parse_included_filter(resource_names, filter, value)
         else
-          parse_filter(key, value)
+          parse_filter(@key, value)
         end
       end
-    end
-
-    def parse_included_filter(resource_name, filterer, value)
-      resource_name = resource_name.to_sym
-      filterer = unformat_key(filterer)
-      resource_klass = @resource_klass._relationships[resource_name].try(:resource_klass)
-      return filter_not_allowed(filterer) unless resource_klass && resource_klass._allowed_filter?(filterer)
-      resource_name = unformat_key(resource_name)
-      @included_filters[resource_name] = Hash[filterer, value]
     end
 
     def parse_filter(key, value)
       key = unformat_key(key)
       return filter_not_allowed(key) unless @resource_klass._allowed_filter?(key)
       @filters[key] = value
+    end
+
+    def parse_included_filter(resource_names, filterer, value)
+      filterer = unformat_key(filterer)
+
+      resource_klass = find_resource_klass(resource_names)
+      resource_name = resource_names.last
+      return filter_not_allowed(filterer) unless resource_klass && resource_klass._allowed_filter?(filterer)
+      resource_name = unformat_key(resource_name)
+      @included_filters[resource_name] = Hash[filterer, value]
+    end
+
+    def find_resource_klass(resource_names)
+      resource_klass = @resource_klass
+      resource_names.each do |name|
+        resource_klass = resource_klass._relationships[name.to_sym].try(:resource_klass)
+      end
+      resource_klass
     end
 
     def filter_not_allowed(value)
@@ -315,21 +328,26 @@ module JSONAPI
         include_directives: @include_directives,
         sort_criteria: @sort_criteria,
         paginator: @paginator,
-        fields: @fields
+        fields: @fields,
+        filter_store: @filter_store
       )
     end
 
     def add_show_operation
+      p "ADD SHOW OPERATION"
       @operations.push JSONAPI::Operation.new(:show,
         @resource_klass,
         context: @context,
         id: @id,
         include_directives: @include_directives,
+        included_filters: @included_filters,
+        filter_store: @filter_store,
         fields: @fields
       )
     end
 
     def add_show_relationship_operation(relationship_type, parent_key)
+      p "add_show_relationship_operation"
       @operations.push JSONAPI::Operation.new(:show_relationship,
         @resource_klass,
         context: @context,
@@ -339,6 +357,7 @@ module JSONAPI
     end
 
     def add_show_related_resource_operation(relationship_type)
+      p "add_show_related_resource_operation"
       @operations.push JSONAPI::Operation.new(:show_related_resource,
         @resource_klass,
         context: @context,
@@ -351,6 +370,7 @@ module JSONAPI
     end
 
     def add_show_related_resources_operation(relationship_type)
+      p "add_show_related_resources_operation"
       @operations.push JSONAPI::Operation.new(:show_related_resources,
         @resource_klass,
         context: @context,
@@ -358,6 +378,7 @@ module JSONAPI
         source_klass: @source_klass,
         source_id: @source_id,
         filters: @source_klass.verify_filters(@filters, @context),
+        filter_store: @filter_store,
         #included_filters: @resource_klass.verify_filters(@included_filters, @context),
         sort_criteria: @sort_criteria,
         paginator: @paginator,
@@ -367,6 +388,7 @@ module JSONAPI
     end
 
     def parse_add_operation(params)
+      p "parse_add_operation"
       fail JSONAPI::Exceptions::InvalidDataFormat unless params.respond_to?(:each_pair)
 
       verify_type(params[:type])
@@ -411,6 +433,7 @@ module JSONAPI
     end
 
     def parse_to_many_links_object(raw)
+      p "parse_to_many_links_object"
       fail JSONAPI::Exceptions::InvalidLinksObject.new if raw.nil?
 
       links_object = {}
@@ -427,6 +450,7 @@ module JSONAPI
     end
 
     def parse_params(params, allowed_fields)
+      p "parse_params"
       verify_permitted_params(params, allowed_fields)
 
       checked_attributes = {}
@@ -492,6 +516,7 @@ module JSONAPI
     end
 
     def parse_to_many_relationship(link_value, relationship, &add_result)
+      p "parse_to_many_relationship"
       if link_value.is_a?(Array) && link_value.length == 0
         linkage = []
       elsif (link_value.is_a?(Hash) || link_value.is_a?(ActionController::Parameters))
@@ -577,6 +602,7 @@ module JSONAPI
     end
 
     def parse_add_relationship_operation(verified_params, relationship, parent_key)
+      p "request_parser adding relationship: #{verified_params}, #{relationship}, #{parent_key}"
       if relationship.is_a?(JSONAPI::Relationship::ToMany)
         @operations.push JSONAPI::Operation.new(:create_to_many_relationships,
           resource_klass,

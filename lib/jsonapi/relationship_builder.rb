@@ -8,6 +8,11 @@ module JSONAPI
       @model_class        = model_class
       @resource_class     = options[:parent_resource]
       @options            = options
+      p "initialize relationship builder"
+      p "relationship_class #{relationship_class}"
+      p "model_class: #{model_class}"
+      p "resource_class: #{@resource_class}"
+      p "options: #{options}"
     end
 
     def define_relationship_methods(relationship_name)
@@ -25,7 +30,11 @@ module JSONAPI
       )
 
       foreign_key = define_foreign_key_setter(relationship.foreign_key)
-
+      p "================================================================================================"
+      p "relationship_builder define_relationship_methods"
+      p "for #{relationship_name}"
+      p "relationship #{relationship}"
+      p "foreign_key #{foreign_key}"
       case relationship
       when JSONAPI::Relationship::ToOne
         associated = define_resource_relationship_accessor(:one, relationship_name)
@@ -47,30 +56,32 @@ module JSONAPI
     end
 
     def define_resource_relationship_accessor(type, relationship_name)
-
       associated_records_method_name = {
         one:  "record_for_#{relationship_name}",
         many: "records_for_#{relationship_name}"
       }
       .fetch(type)
+      p "================================================================================================"
+      p "relationship_builder defining_resource_relationship_accessor for #{type} #{relationship_name}"
+      p "what options we get? #{@options.keys}"
       define_on_resource associated_records_method_name do |options = {}|
         relationship = self.class._relationships[relationship_name]
         relation_name = relationship.relation_name(context: @context)
         records = records_for(relation_name)
 
         resource_klass = relationship.resource_klass
-        
         filters = options.fetch(:filters, {})
-        filters = filters.merge(@options.fetch(:included_filters, {}))
-        #included_filters = included_filters.fetch(relation_name, {})
-
+        included_filters = @options.fetch(:included_filters, {})
+        included_filters = included_filters.fetch(relation_name, {})
+        filters = filters.merge included_filters
+        p "================================================================================================"
+        p "defining #{associated_records_method_name} with filters: #{filters}"
+        p "hi ho what options we get? #{@options.keys}"
+        p "its defining on #{self.class}"
+        binding.pry
         unless filters.nil? || filters.empty?
           records = resource_klass.apply_filters(records, filters, options)
         end
-
-        # unless included_filters.nil? || included_filters.empty?
-        #   records = resource_klass.apply_filters(records, included_filters, options)
-        # end
 
         sort_criteria =  options.fetch(:sort_criteria, {})
         unless sort_criteria.nil? || sort_criteria.empty?
@@ -143,19 +154,27 @@ module JSONAPI
           record.public_send(relationship.resource_klass._primary_key)
         end
       end
-
+      p "====================================================="
+      p "relationship_buidler build_to_many #{associated_records_method_name} #{relationship_name}"
+      p "do we have options? #{options.keys}"
+      p "maybe here? #{@options.keys}"
       # Returns array of instantiated related resource objects
       define_on_resource relationship_name do |options = {}|
-
         relationship = self.class._relationships[relationship_name]
         resource_klass = relationship.resource_klass
+        p "====================================================="
+        p "self.class: #{self.class}"
+        p "resource_klass: #{resource_klass}"
+        p "build_to_many #{associated_records_method_name} #{relationship_name}"
+        p "do we have options? #{options.keys}"
+        #binding.pry
+
         records = public_send(associated_records_method_name, options)
-        
         return records.collect do |record|
           if relationship.polymorphic?
             resource_klass = self.class.resource_for_model(record)
           end
-          resource_klass.new(record, @context)
+          resource_klass.new(record, @context, @options)
         end
       end
     end

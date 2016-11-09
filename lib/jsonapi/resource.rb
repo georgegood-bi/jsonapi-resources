@@ -5,7 +5,7 @@ module JSONAPI
   class Resource
     include Callbacks
 
-    attr_reader :context
+    attr_reader :context, :options
 
     define_jsonapi_resources_callbacks :create,
                                        :update,
@@ -27,6 +27,10 @@ module JSONAPI
       @reload_needed = false
       @changing = false
       @save_needed = false
+
+      p "===================== INITIALIZE RESOuRCE #{model}  =================="
+      binding.pry
+      p "options: #{options.keys}"
     end
 
     def _model
@@ -73,6 +77,8 @@ module JSONAPI
     end
 
     def create_to_many_links(relationship_type, relationship_key_values, options = {})
+      p "=========================="
+      p "create to many links for #{relationship_type}, with options: #{options.keys}"
       change :create_to_many_link do
         _create_to_many_links(relationship_type, relationship_key_values, options)
       end
@@ -122,6 +128,9 @@ module JSONAPI
     # Override this on a resource to customize how the associated records
     # are fetched for a model. Particularly helpful for authorization.
     def records_for(relation_name)
+      p "==========================================================================="
+      p "records for #{relation_name}"
+      p "we have options? #{@options.keys}"
       _model.public_send relation_name
     end
 
@@ -129,6 +138,9 @@ module JSONAPI
       _model.errors.messages
     end
 
+    def set_options(options = {})
+      @options = @options.merge(options)
+    end
     # Add metadata to validation error objects.
     #
     # Suppose `model_error_messages` returned the following error messages
@@ -688,6 +700,10 @@ module JSONAPI
       end
 
       def apply_filters(records, filters, options = {})
+        p "======APPLY FILTERS ========================================"
+        p "for #{records}   that's #{self.class}"
+        p "with filters: #{filters}"
+        p "XYZ"
         required_includes = []
         if filters
           filters.each do |filter, value|
@@ -735,7 +751,11 @@ module JSONAPI
       end
 
       def filter_records(filters, options, records = records(options))
-
+        p "========================================================="
+        p "filter_records"
+        p "filters: #{filters}"
+        p "options keys: #{options.keys}"
+        p "records: #{records}"
         records = apply_filters(records, filters, options)
         apply_includes(records, options)
       end
@@ -754,12 +774,15 @@ module JSONAPI
       end
 
       def find(filters, options = {})
-
         resources_for(find_records(filters, options), options)
       end
 
       def resources_for(records, options) # changed context to options
         context = options[:context]
+        p "========================================================="
+        p "resources_for"
+        p "records: #{records}"
+        p "options: #{options.keys}"
         records.collect do |model|
           resource_class = self.resource_for_model(model)
           resource_class.new(model, context, options)
@@ -771,8 +794,9 @@ module JSONAPI
         records = records(options)
         records = apply_includes(records, options)
         models = records.where({_primary_key => keys})
+
         models.collect do |model|
-          self.resource_for_model(model).new(model, context)
+          self.resource_for_model(model).new(model, context, options)
         end
       end
 
@@ -792,7 +816,7 @@ module JSONAPI
         records = find_records({_primary_key => key}, options.except(:paginator, :sort_criteria))
         model = records.first
         fail JSONAPI::Exceptions::RecordNotFound.new(key) if model.nil?
-        self.resource_for_model(model).new(model, context)
+        self.resource_for_model(model).new(model, context, options)
       end
 
       def find_by_key_serialized_with_caching(key, serializer, options = {})
@@ -1034,7 +1058,7 @@ module JSONAPI
         options = attrs.extract_options!
         options[:parent_resource] = self
         attrs.each do |relationship_name|
-
+          p "adding relationship to #{klass}, with options: #{options}"
           check_reserved_relationship_name(relationship_name)
           check_duplicate_relationship_name(relationship_name)
           JSONAPI::RelationshipBuilder.new(klass, _model_class, options)
@@ -1070,12 +1094,16 @@ module JSONAPI
       end
 
       def find_records(filters, options = {})
+        p "=========================================="
+        p "find_records"
+        p "filters: #{filters}"
+        p "got options: #{options.keys}"
+
         context = options[:context]
         records = filter_records(filters, options)
         sort_criteria = options.fetch(:sort_criteria) { [] }
         order_options = construct_order_options(sort_criteria)
         records = sort_records(records, order_options, context)
-        [ "Records sorted"]
         records = apply_pagination(records, options[:paginator], order_options)
         records
       end

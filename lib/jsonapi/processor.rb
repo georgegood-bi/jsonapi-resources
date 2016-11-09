@@ -50,6 +50,7 @@ module JSONAPI
       @context = params[:context]
       @result = nil
       @result_options = {}
+      @filters = FilterStore.new(@params)
     end
 
     def process
@@ -71,7 +72,10 @@ module JSONAPI
       paginator = params[:paginator]
       fields = params[:fields]
       verified_filters = resource_klass.verify_filters(filters, context)
-      verified_included_filters = get_verified_included_filters(included_filters, context)
+      verified_included_filters = get_verified_included_filters(included_filters, include_directives.paths, context)
+      p "================================================================================================"
+      p "got verified filters: #{verified_included_filters}"
+
       find_options = {
         context: context,
         include_directives: include_directives,
@@ -80,6 +84,7 @@ module JSONAPI
         paginator: paginator,
         fields: fields,
       }
+
       resource_records = if params[:cache_serializer]
         resource_klass.find_serialized_with_caching(verified_filters,
                                                     params[:cache_serializer],
@@ -106,24 +111,39 @@ module JSONAPI
       return JSONAPI::ResourcesOperationResult.new(:ok, resource_records, page_options)
     end
 
-    def get_verified_included_filters(filters, context)
+    def get_verified_included_filters(filters, included_resource_names, context)
+      p "================================================================================================"
+      p "get verified included filters: #{!filters.nil?}"
       return nil unless filters
+      p "get verified included filters: #{filters}"
       filters.each do |key, value|
-        included_resource_klass = resource_klass._relationship(key).resource_klass
+        p "looking for filters for #{key}, #{value}"
+
+        included_resource_klass = find_resource_klass(key, included_resource_names, @resource_klass)
+        p "got klass: #{included_resource_klass}"
+        p "verifying filter: #{value}"
         included_resource_klass.verify_filters(value, context)
       end
     end
 
+    def find_resource_klass(resource_name, included_resource_names, resource_klass)
+      p "================================================================================================"
+      p "find resource klass for #{resource_name}, with #{included_resource_names} and #{resource_klass}"
+      parent = included_resource_names.select { |names| names.include? resource_name }.flatten
+      resource_klass._relationships[parent.first].try(:resource_klass)
+    end
+
     def show
       include_directives = params[:include_directives]
+      included_filters = params[:included_filters]
       fields = params[:fields]
       id = params[:id]
-
       key = resource_klass.verify_key(id, context)
-
+      verified_included_filters = get_verified_included_filters(included_filters, include_directives.paths, context)
       find_options = {
         context: context,
         include_directives: include_directives,
+        included_filters: verified_included_filters,
         fields: fields
       }
 

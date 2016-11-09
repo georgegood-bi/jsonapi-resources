@@ -7,6 +7,7 @@ class CatResource < JSONAPI::Resource
   belongs_to :mother, class_name: 'Cat'
   has_one :father, class_name: 'Cat'
   has_many :children, class_name: 'Cat'
+  has_many :friends, class_name: 'Cat'
 
   filters :name, :first_marriage_children
 
@@ -212,43 +213,60 @@ class JSONAPIRequestTest < ActiveSupport::TestCase
   end
 
   def test_parse_filters_with_valid_included_filter
-    setup_request
+    params = { controller: 'cat', filter: { "children.first_marriage_children" => "Tom" } }
+    setup_request(params)
     @request.parse_filters({ "children.first_marriage_children" => "Tom" })
-    assert_equal(@request.filters, {})
-    assert_equal(@request.included_filters, { children: { first_marriage_children: "Tom" } })
-    assert_equal(@request.errors, [])
+    assert_equal({}, @request.filters)
+    assert_equal({ children: { first_marriage_children: "Tom" } }, @request.included_filters)
+    assert_equal([], @request.errors)
   end
 
   def test_parse_filters_with_non_valid_relationship_for_included_filter
     setup_request
     @request.parse_filters({ "babies.first_marriage_children" => "Tom" })
-    assert_equal(@request.filters, {})
-    assert_equal(@request.included_filters, {})
-    assert_equal(@request.errors.count, 1)
-    assert_equal(@request.errors.first.title, "Filter not allowed")
+    assert_equal({},@request.filters)
+    assert_equal({}, @request.included_filters)
+    assert_equal(1, @request.errors.count)
+    assert_equal("Filter not allowed", @request.errors.first.title)
   end
 
   def test_parse_filters_with_non_valid_included_filter
     setup_request
     @request.parse_filters({ "children.second_marriage_children" => "Tom" })
-    assert_equal(@request.filters, {})
-    assert_equal(@request.included_filters, {})
-    assert_equal(@request.errors.count, 1)
-    assert_equal(@request.errors.first.title, "Filter not allowed")
+    assert_equal({}, @request.filters)
+    assert_equal({}, @request.included_filters)
+    assert_equal(1, @request.errors.count)
+    assert_equal("Filter not allowed", @request.errors.first.title)
   end
 
   def test_parse_filters_with_valid_filter_and_included_filter
     setup_request
     @request.parse_filters({ name: "Whiskers", "children.first_marriage_children" => "Tom" })
-    assert_equal(@request.filters, {name: "Whiskers"})
-    assert_equal(@request.included_filters, { children: { first_marriage_children: "Tom" } })
-    assert_equal(@request.errors, [])
+    assert_equal({ name: "Whiskers" }, @request.filters)
+    assert_equal({ children: { first_marriage_children: "Tom" } }, @request.included_filters)
+    assert_equal([], @request.errors)
+  end
+
+  def test_parse_deeply_nested_included_filters
+    setup_request
+    @request.parse_filters({ "children.friends.name" => "Tom" })
+    assert_equal({}, @request.filters)
+    assert_equal({ friends: { name: "Tom" } }, @request.included_filters)
+    assert_equal([], @request.errors)
+  end
+
+  def test_parse_filters_with_deeply_nested_included_filters
+    setup_request
+    @request.parse_filters({ name: "Whiskers", "children.friends.name" => "Tom" })
+    assert_equal({ name: "Whiskers" } , @request.filters)
+    assert_equal({ friends: { name: "Tom" } }, @request.included_filters)
+    assert_equal([], @request.errors)
   end
 
   private
 
-  def setup_request
-    @request = JSONAPI::RequestParser.new
+  def setup_request(params = nil, options = {})
+    @request = JSONAPI::RequestParser.new(params, options)
     @request.resource_klass = CatResource
   end
 end

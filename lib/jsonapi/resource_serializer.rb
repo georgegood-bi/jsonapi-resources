@@ -275,6 +275,7 @@ module JSONAPI
         # If the object has been serialized once it will be in the related objects list,
         # but it's possible all children won't have been captured. So we must still go
         # through the relationships.
+        #binding.pry
         if include_linkage || include_linked_children
           resources = if source.preloaded_fragments.has_key?(format_key(name))
             source.preloaded_fragments[format_key(name)].values
@@ -378,7 +379,11 @@ module JSONAPI
           end
         end
       else
+        p "fuking thing"
+        p "source: #{source}"
+        p "relationship.name: #{relationship.name}"
         source.public_send(relationship.name).map do |value|
+          p "#{[relationship.type, value.id]}"
           [relationship.type, value.id]
         end
       end
@@ -464,13 +469,14 @@ module JSONAPI
     end
 
     def add_resource(source, include_directives, primary = false)
-      
+      p "================================="
+      p "add_resource"
       type = source.is_a?(JSONAPI::CachedResourceFragment) ? source.type : source.class._type
       id = source.id
 
       @included_objects[type] ||= {}
       existing = @included_objects[type][id]
-
+      p "included_objects: #{@included_objects}"
       if existing.nil?
         obj_hash = object_hash(source, include_directives)
         @included_objects[type][id] = {
